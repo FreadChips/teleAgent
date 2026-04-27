@@ -124,7 +124,7 @@ def compute_time_correlation(H):
 
 def plot_time_series(
     H,
-    save_path=os.path.join(get_abs_path(agent_conf["result_path"]),"channel_time.png"),
+    save_path,
 ):
     """
     绘制单个子载波随时间变化（幅度）
@@ -155,7 +155,7 @@ def plot_time_series(
 
 def plot_correlation_curve(
     H,
-    save_path=os.path.join(get_abs_path(agent_conf["result_path"]), "channel_corr.png"),
+    save_path,
 ):
     """
     绘制时间相关性曲线（lag相关）

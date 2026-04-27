@@ -1,7 +1,7 @@
 from langchain.agents import create_agent
 from model.factory import chat_model
 from utils.prompt_loader import load_system_prompts
-from agent.tools.agent_tools import (rag_summarize, get_weather, get_user_location)
+from agent.tools.agent_tools import (rag_summarize, channel_simulator, channel_compare, channel_plot_time, channel_plot_correlation)
 from agent.tools.middleware import monitor_tool, log_before_model
 
 
@@ -10,7 +10,7 @@ class ReactAgent:
         self.agent = create_agent(
             model=chat_model,
             system_prompt=load_system_prompts(),
-            tools=[rag_summarize, get_weather, get_user_location],
+            tools=[rag_summarize, channel_simulator, channel_compare, channel_plot_time, channel_plot_correlation],
             middleware=[monitor_tool, log_before_model],
         )
 

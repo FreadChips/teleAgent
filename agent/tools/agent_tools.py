@@ -3,6 +3,7 @@
 import os
 import json
 import random
+import time
 import re
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -12,10 +13,11 @@ from langchain_core.tools import tool
 
 from utils.logger_handler import logger
 from utils.config_handler import agent_conf
+from utils.path_tool import get_abs_path
 from rag.rag_service import RagSummarizeService
 
 # ====== 引入 Sionna ======
-from sionna_tools import simulate_channel, compute_time_correlation, plot_time_series, plot_correlation_curve
+from agent.tools.sionna_tools import simulate_channel, compute_time_correlation, plot_time_series, plot_correlation_curve
 
 
 rag = RagSummarizeService()
@@ -73,7 +75,12 @@ def _gaode_get(path: str, params: dict) -> dict:
 # Tool 1：RAG
 # =========================================================
 
-@tool(description="从向量数据库检索通信知识")
+@tool(description="""
+从向量数据库检索 3GPP 协议与通信理论知识。
+【极其重要】：此工具的输入参数 query 必须是你自己提炼并翻译的“纯英文 3GPP 检索关键词”！
+如果用户输入中文，请先在思考阶段将其翻译为精准的英文术语组合
+(例如：将“相干时间”转为 "coherence time"，将“高铁多普勒”转为 "HST Doppler shift 38.901")，然后再调用此工具。禁止直接传入中文。
+""")
 def rag_summarize(query: str) -> str:
     return rag.rag_summarize(query)
 
@@ -147,8 +154,12 @@ def channel_plot_time(
 ) -> str:
 
     try:
-        from sionna_tools import simulate_channel, plot_time_series
 
+        filename = f"channel_time_{model}_{int(speed)}_{int(time.time())}.png"
+        save_path = os.path.join(
+            get_abs_path(agent_conf["result_path"]),
+            filename
+        )
         result = simulate_channel(
             model=model,
             speed=speed,
@@ -156,12 +167,20 @@ def channel_plot_time(
             traj_len=30,
         )
 
-        path = plot_time_series(result["H"])
+        path = plot_time_series(result["H"], save_path=save_path)
 
-        return f"已生成信道时间幅度图: {path}"
+        return json.dumps({
+            "type": "image",
+            "subtype": "time_series",
+            "path": path,
+            "desc": f"信道幅度随时间变化（CDL-{model}, speed={speed} m/s）"
+        })
 
     except Exception as e:
-        return f"绘图失败: {str(e)}"
+        return json.dumps({
+            "type": "error",
+            "message": f"绘图失败: {str(e)}"
+        })
 
 @tool(description="生成信道时间相关性曲线图")
 def channel_plot_correlation(
@@ -170,8 +189,12 @@ def channel_plot_correlation(
 ) -> str:
 
     try:
-        from sionna_tools import simulate_channel, plot_correlation_curve
 
+        filename = f"channel_corr_{model}_{int(speed)}_{int(time.time())}.png"
+        save_path = os.path.join(
+            get_abs_path(agent_conf["result_path"]),
+            filename
+        )
         result = simulate_channel(
             model=model,
             speed=speed,
@@ -179,15 +202,95 @@ def channel_plot_correlation(
             traj_len=30,
         )
 
-        path = plot_correlation_curve(result["H"])
+        path = plot_correlation_curve(result["H"], save_path=save_path)
 
-        return f"已生成信道相关性曲线: {path}"
+        return json.dumps({
+            "type": "image",
+            "subtype": "correlation",
+            "path": path,
+            "desc": f"信道时间相关性曲线（CDL-{model}, speed={speed} m/s）"
+        })
 
     except Exception as e:
-        return f"绘图失败: {str(e)}"
+        return json.dumps({
+            "type": "error",
+            "message": f"绘图失败: {str(e)}"
+        })
 
 
 
 if __name__ == '__main__':
+    print("=" * 60)
+    print(" Agent Tools 测试启动")
+    print("=" * 60)
 
-    print(0)
+    # ===============================
+    # 1. 测试信道仿真
+    # ===============================
+    print("\n[TEST 1] channel_simulator")
+
+    sim_result = channel_simulator.invoke({
+        "model": "A",
+        "speed": 3.0
+    })
+
+    print("仿真结果：")
+    print(sim_result)
+
+    # ===============================
+    # 2. 测试时间幅度图
+    # ===============================
+    print("\n[TEST 2] channel_plot_time")
+
+    plot_time_result = channel_plot_time.invoke({
+        "model": "A",
+        "speed": 3.0
+    })
+
+    print(plot_time_result)
+
+    # 提取路径（简单解析）
+    import re
+    match = re.search(r": (.+)", plot_time_result)
+    if match:
+        path = match.group(1).strip()
+        if os.path.exists(path):
+            print(f"  ✔ 图片存在: {path}")
+        else:
+            print(f"  ✘ 图片不存在: {path}")
+
+    # ===============================
+    # 3. 测试相关性曲线
+    # ===============================
+    print("\n[TEST 3] channel_plot_correlation")
+
+    plot_corr_result = channel_plot_correlation.invoke({
+        "model": "A",
+        "speed": 30.0
+    })
+
+    print(plot_corr_result)
+
+    match = re.search(r": (.+)", plot_corr_result)
+    if match:
+        path = match.group(1).strip()
+        if os.path.exists(path):
+            print(f"  ✔ 图片存在: {path}")
+        else:
+            print(f"  ✘ 图片不存在: {path}")
+
+    # ===============================
+    # 4. 测试对比能力（加分项）
+    # ===============================
+    print("\n[TEST 4] channel_compare")
+
+    compare_result = channel_compare.invoke({
+        "speed_low": 3.0,
+        "speed_high": 30.0
+    })
+
+    print(compare_result)
+
+    print("\n" + "=" * 60)
+    print(" ✅ 所有测试执行完成")
+    print("=" * 60)
